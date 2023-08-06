@@ -95,3 +95,5 @@ and you will get response in json
     "status": true
 }
 ```
+
+<img width="1063" alt="Screenshot 2023-08-06 at 2 09 21 PM" src="https://github.com/mukund720/invoiceParser/assets/11161480/f8df956b-3456-4191-9a38-96a7f478ec42">
