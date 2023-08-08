@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Reader</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+</head>
+
+<body>
+    <div class="container-fluid">
+
+        <div class="row mt-3">
+            <div class="col-sm-3">
+                <div class="col-sm-12">
+                    <form id="uploadForm" class="mt-3" method="POST" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="pdf_file">Upload Invoice</label>
+                            <input type="file" class="form-control-file" id="pdfInput" name="pdf_file" accept=".pdf"
+                                required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </form>
+                </div>
+                <hr>
+                <div class="col-sm-12 hiddenDefault">
+                    <h6 class="text text-danger">Selected Data</h6>
+                    <hr>
+                    <div class="table-responsive">
+                        <table id="selectedDataTable" class="table table-hover table-bordered table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Label</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="textareasContainer">
+                                <!-- Table rows will be added here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <button id="saveButton" class="btn btn-info mt-3" style="display: none;">Map data</button>
+                </div>
+
+            </div>
+            <div class="col-sm-6">
+                <div id="canvasContainer">
+                    <canvas id="pdfCanvas"></canvas>
+                </div>
+            </div>
+            <div class="col-sm-3">
+                <div class="col-sm-12 hiddenDefault">
+                    <hr>
+                    <h6 class="text text-success">JSON Data</h6>
+                    <hr>
+                    <div id="jsonDisplay" class="mt-3">
+                        <!-- JSON data will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.18.0/js/md5.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+
+    <style>
+        #canvasContainer {
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        canvas {
+            width: 100%;
+            height: auto;
+        }
+
+        /* Styling for textareas and dropdowns */
+        textarea,
+        select {
+            display: block;
+            width: 100%;
+            padding: 0.375rem 0.75rem;
+            font-size: 10px;
+            line-height: 1.5;
+            color: #495057;
+            background-color: #fff;
+            background-clip: padding-box;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+
+        /* Additional styling to keep textarea and dropdown in the same line */
+        .row textarea,
+        .row select {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        textarea,
+        select {
+            max-height: 100px;
+            min-height: 50px;
+        }
+
+        /* Styling for JSON display div */
+        #jsonDisplay {
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+            font-family: 'Arial', sans-serif;
+            font-size: 10px;
+            white-space: pre-line;
+            max-height: 300px;
+            /* Limit the height with scrolling if content exceeds */
+            overflow: auto;
+            max-height: 300px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Styling for JSON keys */
+        #jsonDisplay .json-key {
+            color: #1e90ff;
+            /* Blue color for keys */
+            font-weight: bold;
+        }
+
+        /* Styling for JSON values */
+        #jsonDisplay .json-value {
+            color: #228b22;
+            /* Green color for values */
+        }
+
+        /* Styling for JSON numbers */
+        #jsonDisplay .json-number {
+            color: #ff6347;
+            /* Red color for numbers */
+        }
+
+        /* Styling for JSON strings */
+        #jsonDisplay .json-string {
+            color: #ff8c00;
+            /* Orange color for strings */
+        }
+
+        /* Styling for JSON dates */
+        #jsonDisplay .json-date {
+            color: #9400d3;
+            /* Purple color for dates */
+        }
+
+        /* Styling for JSON null values */
+        #jsonDisplay .json-null {
+            color: #808080;
+            /* Gray color for null values */
+        }
+
+        .hiddenDefault {
+            font-family: 'Arial', sans-serif;
+        }
+
+        /* Styling for the table */
+        #selectedDataTable {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #dcdcdc;
+        }
+
+        #selectedDataTable th,
+        #selectedDataTable td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #dcdcdc;
+        }
+
+        #selectedDataTable th {
+            background-color: #f8f8f8;
+            background-color: rgb(3, 81, 104);
+            color: rgb(255, 255, 255);
+        }
+
+        /* Styling for textareas and dropdowns in the table */
+        .form-control {
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            padding: 0.375rem 0.75rem;
+            font-size: 10px;
+            background-color: #fff;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+
+        /* Styling for the Save button */
+        #saveButton {
+            margin-top: 10px;
+        }
+    </style>
+
+    <script>
+        let canvas = document.getElementById('pdfCanvas');
+        let canvasContainer = document.getElementById('canvasContainer');
+        let ctx = canvas.getContext('2d');
+        let images = [];
+        let startX = 0;
+        let startY = 0;
+        let endX = 0;
+        let endY = 0;
+        let isSelecting = false;
+
+        function drawPDF() {
+            if (images.length > 0) {
+                let img = images[0];
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0, img.width, img.height);
+            }
+        }
+        // Labels for dropdown menus
+        const labels = [
+            "Company Name",
+            "Ship Location",
+            "Bill Location",
+            "S.No.",
+            "Quantity",
+            "Amount",
+            "CGST",
+            "SGST"
+        ];
+        // Function to create a dropdown
+        function createDropdown() {
+            let dropdown = document.createElement('select');
+
+            // Create and add options for each label
+            labels.forEach(label => {
+                let option = document.createElement('option');
+                option.value = label;
+                option.text = label;
+                dropdown.appendChild(option);
+            });
+
+            return dropdown;
+        }
+        // Check and toggle visibility of the "Save" button
+        function toggleSaveButtonVisibility() {
+            const saveButton = document.getElementById('saveButton');
+            if (Object.keys(labelTextAreaMap).length > 0) {
+                saveButton.style.display = 'block'; // Show the button
+            } else {
+                saveButton.style.display = 'none'; // Hide the button
+            }
+        }
+        // Function to toggle visibility of elements with hiddenDefault class
+        function toggleHiddenDefaultVisibility() {
+            const hiddenElements = document.querySelectorAll('.hiddenDefault');
+            const visible = (Object.keys(labelTextAreaMap).length > 0)
+            console.log(hiddenElements)
+            hiddenElements.forEach(element => {
+                if (visible) {
+                    element.style.display = 'block';
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+        }
+        let uniqueTextAreas = {}; // Store unique text areas
+        let labelTextAreaMap = {};
+
+        function createUniqueElement(content, rect, type) {
+            let contentHash = hashContent(content);
+
+            if (!uniqueTextAreas.hasOwnProperty(contentHash)) {
+                let textareasContainer = document.getElementById('textareasContainer');
+                let selectedDataTable = document.getElementById('selectedDataTable');
+                let row = selectedDataTable.insertRow();
+
+                let textarea = document.createElement('textarea');
+                textarea.value = content;
+                textarea.classList.add('form-control');
+
+                // Create and append dropdown
+                let dropdown = createDropdown();
+                dropdown.classList.add('form-control');
+
+                let labelCell = row.insertCell(0);
+                let valueCell = row.insertCell(1);
+
+                labelCell.appendChild(textarea);
+                valueCell.appendChild(dropdown);
+
+                uniqueTextAreas[contentHash] = true;
+                textareasContainer.appendChild(row);
+
+                // Store a reference to the textarea element
+                let textareaBox = textarea;
+
+                // Add event listener to the dropdown
+                dropdown.addEventListener('change', function () {
+                    const selectedLabel = dropdown.options[dropdown.selectedIndex].value;
+                    console.log('Selected Label:', selectedLabel);
+                    console.log('Textarea:', textareaBox);
+                    if (textareaBox) {
+                        console.log('Textarea Value:', textareaBox.value);
+                    }
+                    labelTextAreaMap[selectedLabel] = textareaBox && textareaBox.value ? textareaBox.value : '';
+                    updateJsonDisplay(labelTextAreaMap);
+                    toggleSaveButtonVisibility();
+                });
+            }
+        }
+
+        function sendSelectedSection(section) {
+            $.ajax({
+                url: '/process_section',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(section),
+                success: function (response) {
+                    if (response.status) {
+                        console.log(response)
+                        let rect = response.response[0];
+                        createUniqueElement(rect, rect, response.type);
+                    }
+                    console.log('Retrieved values:', response);
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error:', error);
+                }
+            });
+        }
+
+        function hashContent(content) {
+            // Use the MD5 algorithm to generate a hash based on the content
+            return md5(content);
+        }
+
+        function highlightMatchingSelection(rect, contentRectangles) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPDF();
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+
+            if (contentRectangles) {
+                contentRectangles.forEach(contentRect => {
+                    ctx.strokeRect(contentRect.startX, contentRect.startY, contentRect.width, contentRect
+                        .height);
+                });
+            }
+
+            ctx.strokeRect(rect.startX, rect.startY, rect.width, rect.height);
+        }
+
+
+
+        function highlightSelection(rect) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPDF();
+
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(rect.startX, rect.startY, rect.width, rect.height);
+        }
+
+        function drawSectionBorder(startX, startY, endX, endY, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+        }
+
+
+        canvas.addEventListener('mousedown', (event) => {
+            startX = event.clientX - canvas.getBoundingClientRect().left;
+            startY = event.clientY - canvas.getBoundingClientRect().top;
+            isSelecting = true;
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (isSelecting) {
+                endX = event.clientX - canvas.getBoundingClientRect().left;
+                endY = event.clientY - canvas.getBoundingClientRect().top;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawPDF();
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 2;
+
+                // Calculate the scaling factors
+                let scaleX = canvas.width / canvas.offsetWidth;
+                let scaleY = canvas.height / canvas.offsetHeight;
+
+                // Apply scaling to the rectangle coordinates
+                ctx.strokeRect(startX * scaleX, startY * scaleY,
+                    (endX - startX) * scaleX, (endY - startY) * scaleY);
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isSelecting = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPDF();
+            let section = {
+                startX: Math.min(startX, endX),
+                startY: Math.min(startY, endY),
+                endX: Math.max(startX, endX),
+                endY: Math.max(startY, endY),
+                croppedImage: canvas.toDataURL('image/jpeg')
+            };
+
+            // Apply the same scaling to section coordinates before sending
+            section.startX *= canvas.width / canvas.offsetWidth;
+            section.startY *= canvas.height / canvas.offsetHeight;
+            section.endX *= canvas.width / canvas.offsetWidth;
+            section.endY *= canvas.height / canvas.offsetHeight;
+
+            let sectionColor = getNextColor();
+            sendSelectedSection(section);
+            drawSectionBorder(section.startX, section.startY, section.endX, section.endY, sectionColor);
+        });
+        $('#uploadForm').submit(function (event) {
+            event.preventDefault();
+            let formData = new FormData(this);
+            $.ajax({
+                url: '/process_pdf',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                    if (response.success) {
+                        images = response.images.map(imgBase64 => {
+                            let img = new Image();
+                            img.onload = function () {
+                                drawPDF();
+                            };
+                            img.src = 'data:image/jpeg;base64,' + imgBase64;
+                            return img;
+                        });
+                    } else {
+                        console.error('Error:', response.error);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error:', error);
+                }
+            });
+        });
+
+        function adjustCanvasSize() {
+            let containerWidth = canvasContainer.clientWidth;
+            let containerHeight = containerWidth * (canvas.height / canvas.width);
+            canvas.width = containerWidth;
+            canvas.height = containerHeight;
+            drawPDF();
+        }
+
+        window.addEventListener('resize', adjustCanvasSize);
+        adjustCanvasSize();
+        let sectionColors = ['red', 'blue', 'green', 'orange', 'purple']; // List of different colors
+        let currentColorIndex = 0; // Index of the current color
+
+        function getNextColor() {
+            let color = sectionColors[currentColorIndex];
+            currentColorIndex = (currentColorIndex + 1) % sectionColors.length;
+            return color;
+        }
+        // Attach an event listener to the "Save" button
+        document.getElementById('saveButton').addEventListener('click', function () {
+            const pdfInput = document.getElementById('pdfInput');
+            const selectedFile = pdfInput.files[0];
+
+            // Read the selected PDF file and convert to Base64
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const pdfData = event.target.result.split(',')[1]; // Get Base64-encoded PDF data
+
+                // Create a JSON payload including label-textarea map and PDF data
+                const payload = {
+                    pdfData: pdfData,
+                    labelTextAreaMap: labelTextAreaMap,
+                    payload: payload,
+                };
+
+                // Make an API request to save the data
+                $.ajax({
+                    url: '/save_data', // Replace with your API endpoint
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(payload),
+                    success: function (response) {
+                        console.log('Data saved successfully:', response);
+                    },
+                    error: function (xhr, status, error) {
+                        console.error('Error:', error);
+                    }
+                });
+            };
+
+            reader.readAsDataURL(selectedFile); // Read and convert PDF to Base64
+        });
+        // Function to update the JSON display
+        payload = {}
+
+        function updateJsonDisplay(data) {
+            const jsonDisplay = document.getElementById('jsonDisplay');
+            const formattedData = JSON.stringify(data, (key, value) => {
+                payload[key] = value
+                if (typeof value === 'string' && Date.parse(value)) {
+                    // Check if the value is a valid date string
+                    return `<span class=json-date>${value}</span>`;
+                } else if (typeof value === 'number') {
+                    return `<span class=json-number>${value}</span>`;
+                } else if (typeof value === 'string') {
+                    return `<span class=json-string>${value}</span>`;
+                } else if (value === null) {
+                    return `<span class=json-null>null</span>`;
+                }
+                return value;
+
+            }, 2).replace(/\\n/g, '<br>');
+
+            jsonDisplay.innerHTML = formattedData;
+            toggleHiddenDefaultVisibility()
+
+        }
+    </script>
+</body>
+
+</html>

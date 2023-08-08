@@ -4,7 +4,7 @@ from flask import Flask, render_template, render_template, request, jsonify
 from pdf2image import convert_from_bytes
 import io
 import base64
-from PIL import Image
+from PIL import Image,ImageDraw
 import pytesseract
 
 
@@ -16,6 +16,32 @@ uploaded_images = []  # To store the loaded images globally
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# Define the save_data endpoint
+@app.route('/save_data', methods=['POST'])
+def save_data():
+    data = request.get_json()
+    pdf_data = data.get('pdfData')
+    label_text_area_map = data.get('labelTextAreaMap')
+
+    if pdf_data and label_text_area_map:
+        # Process the PDF data and label-textarea associations
+        # You can save the PDF and label associations in your desired way here
+        
+        # Assuming you save successfully
+        response = {
+            'response':[label_text_area_map],
+            'status': True,
+            'message': 'Mapped'
+        }
+    else:
+        response = {
+             'response':[],
+            'status': False,
+            'message': 'Data missing'
+        }
+    
+    return jsonify(response)
 
 @app.route('/process_pdf', methods=['POST'])
 def process_pdf():
@@ -37,7 +63,6 @@ def process_pdf():
         return jsonify({'success': True, 'images': image_data})
     return jsonify({'success': False, 'error': 'No file uploaded'})
 
-# ... (other route definitions and functions)
 
 def is_text_table(text):
     # Define regular expressions to match common table-related keywords
@@ -58,20 +83,38 @@ def process_section():
     section = request.json
     if uploaded_images:
         selected_image = uploaded_images[0]
-        extracted_text = extract_text_from_section(selected_image, section)
+        extracted_text, word_boxes = extract_text_and_boxes_from_section(selected_image, section)
         
-        if is_text_table(extracted_text):
-            html_table = generate_html_table(extracted_text)
-            return jsonify({'message': 'parsed table', 'type': 'table', 'response': html_table, 'status': True}), 200
+        if extracted_text:
+            image_with_boxes = draw_boxes_on_image(selected_image, word_boxes)
+            buffered = io.BytesIO()
+            image_with_boxes.save(buffered, format="JPEG")
+            img_with_boxes_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            
+            if is_text_table(extracted_text[0]):  # Check the extracted text (first element of the tuple)
+                html_table = generate_html_table(extracted_text[0])
+                return jsonify({'message': 'parsed table', 'type': 'table', 'response': html_table, 'status': True, 'image_with_boxes': img_with_boxes_base64}), 200
+            else:
+                return jsonify({'message': 'parsed text', 'type': 'string', 'response': [extracted_text], 'status': len(extracted_text[0]) > 0, 'image_with_boxes': img_with_boxes_base64}), 200
         else:
-            return jsonify({'message': 'parsed text', 'type': 'string', 'response': [extracted_text], 'status': len(extracted_text) > 0}), 200
+            return jsonify({'message': 'parsed text', 'type': 'error', 'response': [], 'status': False}), 200
     else:
         return jsonify({'message': 'parsed text', 'type': 'error', 'response': [], 'status': False}), 200
 
 
-def extract_text_from_section(selected_image, section):
+def draw_boxes_on_image(image, word_boxes):
+    img_with_boxes = image.copy()
+    draw = ImageDraw.Draw(img_with_boxes)
+    
+    for box in word_boxes.splitlines():
+        box = box.split()
+        left, top, right, bottom = int(box[1]), int(box[2]), int(box[3]), int(box[4])
+        draw.rectangle([left, top, right, bottom], outline="red", width=2)
+    
+    return img_with_boxes
+
+def extract_text_and_boxes_from_section(selected_image, section):
     try:
-        # Get the coordinates for cropping
         startX = section['startX']
         startY = section['startY']
         endX = section['endX']
@@ -95,10 +138,12 @@ def extract_text_from_section(selected_image, section):
         cropped_img = img.crop((startX, startY, endX, endY))
 
         # Perform OCR on the cropped image
-        extracted_text = pytesseract.image_to_string(cropped_img)
-        return extracted_text
+        extracted_text = pytesseract.image_to_string(cropped_img, output_type=pytesseract.Output.STRING)
+        word_boxes = pytesseract.image_to_boxes(cropped_img, output_type=pytesseract.Output.BYTES)
+        
+        return extracted_text, word_boxes
     except Exception as e:
-        return f"Error extracting text: {e}"
+        return "", f"Error extracting text: {e}"
 
 def generate_html_table(table_text):
     # Parse the table_text and generate an HTML table

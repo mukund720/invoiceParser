@@ -1,0 +1,8 @@
+<div>
+  <h2>Text Areas</h2>
+  <form [formGroup]="textAreasForm">
+    <div *ngFor="let textArea of textAreas; let i = index">
+      <textarea [formControlName]="generateControlName(i)"></textarea>
+    </div>
+  </form>
+</div>
