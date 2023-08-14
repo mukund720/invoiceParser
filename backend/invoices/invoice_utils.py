@@ -4,6 +4,9 @@ import pytesseract
 from io import BytesIO
 import time
 from PIL import Image
+import fitz  # PyMuPDF
+import pytesseract
+import json
 
 def is_pdf(data):
     return data.startswith(b'%PDF')
@@ -22,8 +25,14 @@ def extract_text_from_pdf(pdf_file):
     with pdfplumber.open(pdf_file) as pdf:
         return '\n'.join([page.extract_text() for page in pdf.pages])
 
-def extract_text_from_image(image_file):
-    return pytesseract.image_to_string(Image.open(image_file))
+def extract_text_from_image(image):
+    # Convert the image to grayscale for better OCR results
+    gray_image = image.convert("L")
+
+    # Use pytesseract to extract text from the grayscale image
+    extracted_text = pytesseract.image_to_string(gray_image)
+
+    return extracted_text
 
 def format_processing_time(processing_time):
     if processing_time < 1:
@@ -226,3 +235,60 @@ def convert_to_json(data):
         }]
     }
     return invoice_data
+# Extract text from PDF using PyMuPDF
+def extract_text_from_pdf(pdf_file):
+    extracted_text = ''
+    pdf_document = fitz.open(pdf_file)
+    for page_num in range(pdf_document.page_count):
+        page = pdf_document.load_page(page_num)
+        page_text = page.get_text()
+        extracted_text += page_text
+    pdf_document.close()
+    return extracted_text
+
+
+def extract_labels_and_values(text):
+    lines = text.split('\n')
+    labels_values = {}
+    current_label = None
+
+    for line in lines:
+        line = line.strip()  # Remove leading and trailing spaces
+        # Check if the line contains a colon to determine if it's a label
+        if ':' in line:
+            label, value = line.split(':', 1)
+            current_label = label.strip()
+            labels_values[current_label] = value.strip()
+        elif '-' in line:
+            parts = line.split('-', 1)
+            if len(parts) >= 2:
+                label = parts[0].strip()
+                value = parts[1].strip()
+                if current_label is not None:
+                    labels_values[current_label] += ' ' + label
+                    label = current_label
+                    current_label = None
+                labels_values[label] = value
+        elif current_label is not None:
+            # Append to the current label's value if no colon or dash is present
+            labels_values[current_label] += ' ' + line
+        else:
+            # No current label, treat this as a label itself
+            if line:
+                labels_values[line] = ""
+
+    # Find a label that contains the word "Date" and extract its value
+    date_label = next((label for label in labels_values.keys() if 'Date' in label), None)
+    if date_label:
+        date_value = labels_values[date_label]
+        # Remove the label from the dictionary
+        del labels_values[date_label]
+
+        # Additional processing to extract the date value
+        date_pattern = r'(\w{3} \d{2}, \d{4})'  # Format: "Jun 15, 2023"
+        match = re.search(date_pattern, date_value)
+        if match:
+            labels_values['Date'] = match.group(1)
+
+    return labels_values
+

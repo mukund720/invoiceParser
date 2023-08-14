@@ -31,8 +31,8 @@
                         <table id="selectedDataTable" class="table table-hover table-bordered table-striped">
                             <thead>
                                 <tr>
-                                    <th>Label</th>
-                                    <th>Value</th>
+                                    <th class="sticky-th">Value</th>
+                                    <th class="sticky-th">Label</th>
                                 </tr>
                             </thead>
                             <tbody id="textareasContainer">
@@ -202,6 +202,19 @@
         #saveButton {
             margin-top: 10px;
         }
+        .table-responsive
+        {
+    max-height: 440px;
+    height: 440px;
+    overflow: scroll;
+        }
+        /* Styling for the sticky table header */
+#selectedDataTable thead th {
+    position: sticky;
+    top: 0;
+    background-color: rgb(3, 81, 104);
+    color: rgb(255, 255, 255);
+}
     </style>
 
     <script>
@@ -261,7 +274,7 @@
         function toggleHiddenDefaultVisibility() {
             const hiddenElements = document.querySelectorAll('.hiddenDefault');
             const visible = (Object.keys(labelTextAreaMap).length > 0)
-            console.log(hiddenElements)
+            // console.log(hiddenElements)
             hiddenElements.forEach(element => {
                 if (visible) {
                     element.style.display = 'block';
@@ -273,10 +286,10 @@
         let uniqueTextAreas = {}; // Store unique text areas
         let labelTextAreaMap = {};
 
-        function createUniqueElement(content, rect, type) {
+        function createUniqueElement(content, rect, type, isValue) {
             let contentHash = hashContent(content);
 
-            if (!uniqueTextAreas.hasOwnProperty(contentHash)) {
+            if (!uniqueTextAreas.hasOwnProperty(contentHash)||isValue) {
                 let textareasContainer = document.getElementById('textareasContainer');
                 let selectedDataTable = document.getElementById('selectedDataTable');
                 let row = selectedDataTable.insertRow();
@@ -288,7 +301,6 @@
                 // Create and append dropdown
                 let dropdown = createDropdown();
                 dropdown.classList.add('form-control');
-
                 let labelCell = row.insertCell(0);
                 let valueCell = row.insertCell(1);
 
@@ -313,6 +325,19 @@
                     updateJsonDisplay(labelTextAreaMap);
                     toggleSaveButtonVisibility();
                 });
+
+
+                if (isValue) {
+
+                    let key=Object.keys(content).length>0?Object.keys(content)[0]:''
+                    let value=content[key]
+                    dropdown.options.selectedIndex=labels.indexOf(key)!=-1?labels.indexOf(key):0
+                    const selectedLabel = dropdown.options[dropdown.options.selectedIndex].value;
+                    textarea.value=value
+                    labelTextAreaMap[selectedLabel] = textareaBox && textareaBox.value ? textareaBox.value : '';
+                    updateJsonDisplay(labelTextAreaMap);
+                    toggleSaveButtonVisibility();
+                }
             }
         }
 
@@ -326,7 +351,7 @@
                     if (response.status) {
                         console.log(response)
                         let rect = response.response[0];
-                        createUniqueElement(rect, rect, response.type);
+                        createUniqueElement(rect, rect, response.type, false);
                     }
                     console.log('Retrieved values:', response);
                 },
@@ -433,6 +458,26 @@
                 contentType: false,
                 success: function (response) {
                     if (response.success) {
+                        // labels=[]
+                        const label_values = response.labels_values ? response.labels_values : []
+                        if (label_values.length > 0) {
+                            let labelsList = (label_values[0])
+                            labels.push(...Object.keys(labelsList))
+                            let newItems = [];
+                            for (const key in labelsList) {
+    if (labelsList.hasOwnProperty(key)) {
+        const value = labelsList[key];
+        newItems.push({[key]:value})
+    }
+}
+                            console.log(newItems)
+
+                            for (let i = 0; i < newItems.length; i++) {
+                                let data = newItems[i]
+                                // console.log(i)
+                                createUniqueElement(data, data, 'string', true)
+                            }
+                        }
                         images = response.images.map(imgBase64 => {
                             let img = new Image();
                             img.onload = function () {
